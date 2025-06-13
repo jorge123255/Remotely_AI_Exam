@@ -1,0 +1,110 @@
+# Simplified Dockerfile for Remotely AI Exam Server Only
+# Focuses on building just the server component without desktop clients
+
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
+WORKDIR /app
+EXPOSE 5000
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+
+# Install Node.js for LibraryManager
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs
+
+# Set environment variables for better NuGet behavior
+ENV NUGET_XMLDOC_MODE=skip
+ENV DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
+ENV DOTNET_NOLOGO=1
+
+# Clear NuGet cache and configure sources
+RUN dotnet nuget locals all --clear
+
+# Create simplified NuGet.config
+COPY <<NUGET_EOF /src/NuGet.config
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <clear />
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
+  </packageSources>
+  <config>
+    <add key="globalPackagesFolder" value="/tmp/nuget-packages" />
+  </config>
+</configuration>
+NUGET_EOF
+
+# Copy project files first for better caching
+COPY ["Server/Server.csproj", "Server/"]
+COPY ["Shared/Shared.csproj", "Shared/"]
+
+# Restore packages
+WORKDIR /src/Server
+RUN dotnet restore "Server.csproj" --verbosity normal
+
+# Copy source files (excluding problematic directories)
+COPY Server/ ./
+COPY Shared/ ../Shared/
+
+# Remove any test or problematic directories that might have been copied
+RUN find . -name "Tests" -type d -exec rm -rf {} + 2>/dev/null || true
+RUN find . -name "Desktop.*" -type d -exec rm -rf {} + 2>/dev/null || true
+RUN find . -name "Agent" -type d -exec rm -rf {} + 2>/dev/null || true
+
+# Install LibraryManager CLI tool
+RUN dotnet tool install -g Microsoft.Web.LibraryManager.Cli --add-source https://api.nuget.org/v3/index.json
+
+# Add dotnet tools to PATH
+ENV PATH="$PATH:/root/.dotnet/tools"
+
+# Restore JavaScript libraries with fallback strategy
+RUN libman restore || (echo "LibraryManager restore failed, trying manual download..." && \
+    mkdir -p wwwroot/lib/microsoft-signalr && \
+    mkdir -p wwwroot/lib/msgpack && \
+    mkdir -p wwwroot/lib/microsoft/signalr-protocol-msgpack && \
+    mkdir -p wwwroot/lib/fontawesome && \
+    curl -o wwwroot/lib/msgpack/msgpack.min.js https://cdn.jsdelivr.net/npm/msgpack@2.8.0/dist/msgpack.min.js || true && \
+    curl -o wwwroot/lib/microsoft/signalr-protocol-msgpack/signalr-protocol-msgpack.min.js https://cdn.jsdelivr.net/npm/@microsoft/signalr-protocol-msgpack@8.0.7/dist/browser/signalr-protocol-msgpack.min.js || true)
+
+# Build server only
+RUN dotnet build "Server.csproj" \
+    -c Release \
+    -o /app/build \
+    --no-restore \
+    --verbosity normal
+
+# Publish the server application
+RUN dotnet publish "Server.csproj" \
+    -c Release \
+    -o /app/publish \
+    --no-restore \
+    --verbosity normal
+
+FROM base AS final
+WORKDIR /app
+
+# Install required packages for AI Exam Taker integration
+RUN apt-get update && \
+    apt-get install -y \
+        curl \
+        wget \
+        unzip \
+        && rm -rf /var/lib/apt/lists/*
+
+# Copy the published application
+COPY --from=build /app/publish .
+
+# Create necessary directories for AI integration
+RUN mkdir -p /app/ai-integration /app/logs /app/data
+
+# Set environment variables
+ENV ASPNETCORE_URLS=http://+:5000
+ENV ASPNETCORE_ENVIRONMENT=Production
+ENV ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:5000/health || exit 1
+
+ENTRYPOINT ["dotnet", "Remotely.Server.dll"]

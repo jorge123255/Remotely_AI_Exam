@@ -1,5 +1,6 @@
-﻿@inject AuthenticationStateProvider AuthProvider
-@inject IDataService DataService
+﻿@namespace Remotely.Server.Components
+@using Microsoft.AspNetCore.Components.Routing
+@inject AuthenticationStateProvider AuthProvider
 @inject IDataService DataService
 @inject IThemeProvider ThemeProvider
 
@@ -11,7 +12,7 @@
     <title>Remotely</title>
     <base href="/" />
     <link href="css/site.css" rel="stylesheet" />
-    <link href="Remotely_Server.styles.css" rel="stylesheet" />
+    <link href="Remotely.Server.styles.css" rel="stylesheet" />
     <script src="interop.js"></script>
 
     @if (_theme == Theme.Dark)
@@ -28,7 +29,18 @@
     <HeadOutlet @rendermode="RenderModeForPage" />
 </head>
 <body>
-    <Routes @rendermode="RenderModeForPage" />
+    <Router AppAssembly="@typeof(App).Assembly">
+        <Found Context="routeData">
+            <RouteView RouteData="@routeData" DefaultLayout="@typeof(Remotely.Server.Components.Layout.MainLayout)" />
+            <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+        </Found>
+        <NotFound>
+            <PageTitle>Not found</PageTitle>
+            <LayoutView Layout="@typeof(Remotely.Server.Components.Layout.MainLayout)">
+                <p role="alert">Sorry, there's nothing at this address.</p>
+            </LayoutView>
+        </NotFound>
+    </Router>
     <script src="_framework/blazor.web.js"></script>
     <script src="/lib/bootstrap/bootstrap.bundle.min.js"></script>
 </body>

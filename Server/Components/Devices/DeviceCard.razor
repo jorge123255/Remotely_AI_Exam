@@ -1,4 +1,5 @@
-﻿@attribute [Authorize]
+﻿@namespace Remotely.Server.Components.Devices
+@attribute [Authorize]
 @inherits AuthComponentBase
 
 <div @ref="_card" class="card border-secondary my-3 me-3 device-card @_theme @GetCardStateClass()"

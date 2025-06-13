@@ -1,0 +1,550 @@
+@page "/ai-control"
+@using Microsoft.AspNetCore.Authorization
+@inherits AuthComponentBase
+@attribute [Authorize]
+
+<PageTitle>AI Control - Remotely</PageTitle>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h2><i class="fas fa-robot"></i> AI Exam Control</h2>
+            <p class="text-muted">Configure and control AI-powered exam taking capabilities</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Remote Control Status -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5><i class="fas fa-desktop"></i> Remote Control Status</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>Auto-Detection:</strong>
+                                <span class="badge @(IsAutoDetecting ? "bg-primary" : "bg-secondary")">
+                                    @(IsAutoDetecting ? "Scanning..." : "Idle")
+                                </span>
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary" @onclick="StartAutoDetection">
+                                <i class="fas fa-search"></i> Scan
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <strong>Connected Device:</strong>
+                        <div class="mt-1">
+                            @if (IsConnected)
+                            {
+                                <span class="text-success">
+                                    <i class="fas fa-check-circle"></i> @ConnectedDeviceName
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">No device connected</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <strong>Screen Detection:</strong>
+                        <span class="badge @(IsScreenDetected ? "bg-success" : "bg-warning")">
+                            @(IsScreenDetected ? "Active" : "Waiting")
+                        </span>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-info btn-sm" @onclick="OpenDebugConsole">
+                            <i class="fas fa-terminal"></i> Debug Console
+                        </button>
+                        <button class="btn btn-primary btn-sm" @onclick="OpenRemoteControl">
+                            <i class="fas fa-external-link-alt"></i> Remote Control
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Configuration -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5><i class="fas fa-brain"></i> AI Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="aiModel" class="form-label">AI Model</label>
+                        <select class="form-select" id="aiModel" @bind="SelectedModel">
+                            <option value="qwen2.5vl:32b-q4_K_M">Qwen2.5VL 32B (Vision)</option>
+                            <option value="qwen2.5:7b">Qwen2.5 7B (Text)</option>
+                            <option value="llama3.2-vision:11b">Llama 3.2 Vision 11B</option>
+                            <option value="gpt-4o">GPT-4o (OpenAI)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="aiServerUrl" class="form-label">AI Server URL</label>
+                        <input type="text" class="form-control" id="aiServerUrl" @bind="AiServerUrl" placeholder="http://192.168.1.10:11434">
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="enableVision" @bind="EnableVision">
+                            <label class="form-check-label" for="enableVision">
+                                Enable Vision Capabilities
+                            </label>
+                        </div>
+                    </div>
+                    <button class="btn btn-success" @onclick="TestAI">
+                        <i class="fas fa-cog"></i> Test AI Model
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- RAG Knowledge Management -->
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5><i class="fas fa-book"></i> Knowledge Base Management</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="examType" class="form-label">Exam Type</label>
+                        <select class="form-select" id="examType" @bind="SelectedExamType">
+                            <option value="">Select Exam Type...</option>
+                            <option value="aws-solutions-architect">AWS Solutions Architect</option>
+                            <option value="aws-developer">AWS Developer Associate</option>
+                            <option value="azure-fundamentals">Azure Fundamentals</option>
+                            <option value="azure-administrator">Azure Administrator</option>
+                            <option value="gcp-associate">Google Cloud Associate</option>
+                            <option value="cissp">CISSP Security</option>
+                            <option value="comptia-security">CompTIA Security+</option>
+                            <option value="ccna">Cisco CCNA</option>
+                            <option value="pmp">Project Management PMP</option>
+                            <option value="custom">Custom Exam Type</option>
+                        </select>
+                    </div>
+                    
+                    @if (SelectedExamType == "custom")
+                    {
+                        <div class="mb-3">
+                            <label for="customExamType" class="form-label">Custom Exam Name</label>
+                            <input type="text" class="form-control" id="customExamType" @bind="CustomExamType" 
+                                   placeholder="Enter custom exam type name...">
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label">Upload Knowledge Documents</label>
+                        <div class="border rounded p-3" style="border-style: dashed !important;">
+                            <div class="text-center">
+                                <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i>
+                                <p class="text-muted">Drag and drop files here or click to browse</p>
+                                <input type="file" class="form-control" multiple accept=".pdf,.txt,.docx" @onchange="HandleFileUpload">
+                                <small class="text-muted">Supported formats: PDF, TXT, DOCX</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <strong>Knowledge Base Status:</strong>
+                            <button class="btn btn-sm btn-outline-info" @onclick="ViewKnowledgeBase">
+                                <i class="fas fa-eye"></i> View Documents
+                            </button>
+                        </div>
+                        <div class="mt-2">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <small class="text-muted">Documents:</small>
+                                    <div class="fw-bold">@DocumentCount</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <small class="text-muted">Knowledge Chunks:</small>
+                                    <div class="fw-bold">@KnowledgeChunks</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <small class="text-muted">Readiness:</small>
+                                    <span class="badge @(IsKnowledgeReady ? "bg-success" : "bg-warning")">
+                                        @(IsKnowledgeReady ? "Ready" : "Needs More Data")
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="examInstructions" class="form-label">Exam Instructions</label>
+                        <textarea class="form-control" id="examInstructions" rows="3" @bind="ExamInstructions" 
+                                  placeholder="Enter specific instructions for the AI exam taker..."></textarea>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="autonomousMode" @bind="AutonomousMode">
+                            <label class="form-check-label" for="autonomousMode">
+                                Autonomous Mode (AI makes decisions independently)
+                            </label>
+                        </div>
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-success" @onclick="StartExam" disabled="@(!CanStartExam)">
+                                <i class="fas fa-play"></i> Start Exam
+                            </button>
+                            <button class="btn btn-warning" @onclick="PauseExam" disabled="@(!IsRunning)">
+                                <i class="fas fa-pause"></i> Pause
+                            </button>
+                            <button class="btn btn-danger" @onclick="StopExam" disabled="@(!IsRunning)">
+                                <i class="fas fa-stop"></i> Stop
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Enhanced Status Panel -->
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5><i class="fas fa-info-circle"></i> System Status</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <strong>Remote Control:</strong> 
+                        <span class="badge @(IsConnected ? "bg-success" : "bg-danger")">
+                            @(IsConnected ? "Connected" : "Disconnected")
+                        </span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>AI Model:</strong> 
+                        <span class="badge @(IsAiReady ? "bg-success" : "bg-warning")">
+                            @(IsAiReady ? "Ready" : "Not Ready")
+                        </span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>Knowledge Base:</strong> 
+                        <span class="badge @(IsKnowledgeReady ? "bg-success" : "bg-warning")">
+                            @(IsKnowledgeReady ? "Ready" : "Loading")
+                        </span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>Screen Detection:</strong> 
+                        <span class="badge @(IsScreenDetected ? "bg-success" : "bg-secondary")">
+                            @(IsScreenDetected ? "Active" : "Waiting")
+                        </span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>Exam Status:</strong> 
+                        <span class="badge @GetStatusBadgeClass()">@ExamStatus</span>
+                    </div>
+                    @if (IsRunning)
+                    {
+                        <div class="mb-2">
+                            <strong>Runtime:</strong> @Runtime
+                        </div>
+                        <div class="mb-2">
+                            <strong>Questions Detected:</strong> @QuestionsDetected
+                        </div>
+                        <div class="mb-2">
+                            <strong>Answers Found:</strong> @AnswersFound
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Activity Log -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5><i class="fas fa-list"></i> Activity Log</h5>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="ClearLog">
+                        <i class="fas fa-trash"></i> Clear
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="log-container" style="height: 300px; overflow-y: auto; background-color: #f8f9fa; padding: 10px; border-radius: 4px;">
+                        @foreach (var logEntry in ActivityLog)
+                        {
+                            <div class="log-entry mb-1">
+                                <span class="badge @GetLogBadgeClass(logEntry.Level)">@logEntry.Level</span>
+                                <span class="text-muted">[@logEntry.Timestamp.ToString("HH:mm:ss")]</span>
+                                <span>@logEntry.Message</span>
+                            </div>
+                        }
+                        @if (!ActivityLog.Any())
+                        {
+                            <div class="text-muted text-center">No activity logged yet...</div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    // AI Configuration
+    private string SelectedModel { get; set; } = "qwen2.5vl:32b-q4_K_M";
+    private string AiServerUrl { get; set; } = "http://192.168.1.10:11434";
+    private bool EnableVision { get; set; } = true;
+
+    // Remote Control Status
+    private bool IsAutoDetecting { get; set; } = false;
+    private bool IsConnected { get; set; } = false;
+    private bool IsScreenDetected { get; set; } = false;
+    private string ConnectedDeviceName { get; set; } = "";
+
+    // Knowledge Base Management
+    private string SelectedExamType { get; set; } = "";
+    private string CustomExamType { get; set; } = "";
+    private int DocumentCount { get; set; } = 0;
+    private int KnowledgeChunks { get; set; } = 0;
+    private bool IsKnowledgeReady { get; set; } = false;
+
+    // Exam Control
+    private string ExamInstructions { get; set; } = "";
+    private bool AutonomousMode { get; set; } = false;
+
+    // System Status
+    private bool IsAiReady { get; set; } = false;
+    private bool IsRunning { get; set; } = false;
+    private string ExamStatus { get; set; } = "Idle";
+    private string Runtime { get; set; } = "00:00:00";
+    private int QuestionsDetected { get; set; } = 0;
+    private int AnswersFound { get; set; } = 0;
+
+    // Computed Properties
+    private bool CanStartExam => IsConnected && IsAiReady && IsKnowledgeReady && !string.IsNullOrEmpty(SelectedExamType);
+
+    // Activity Log
+    private List<LogEntry> ActivityLog { get; set; } = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        AddLogEntry("INFO", "AI Control interface initialized");
+        await base.OnInitializedAsync();
+    }
+
+    private async Task StartAutoDetection()
+    {
+        IsAutoDetecting = true;
+        AddLogEntry("INFO", "Starting auto-detection scan...");
+        StateHasChanged();
+        
+        try
+        {
+            // Simulate auto-detection process
+            await Task.Delay(2000);
+            
+            // Simulate finding a device
+            IsConnected = true;
+            ConnectedDeviceName = "Exam Computer (192.168.1.100)";
+            IsScreenDetected = true;
+            
+            AddLogEntry("SUCCESS", $"Auto-detected and connected to {ConnectedDeviceName}");
+        }
+        catch (Exception ex)
+        {
+            AddLogEntry("ERROR", $"Auto-detection failed: {ex.Message}");
+        }
+        finally
+        {
+            IsAutoDetecting = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OpenDebugConsole()
+    {
+        AddLogEntry("INFO", "Opening debug console...");
+        // TODO: Implement debug console modal or navigation
+    }
+
+    private void OpenRemoteControl()
+    {
+        AddLogEntry("INFO", "Opening remote control interface...");
+        // TODO: Navigate to remote control page or open in new tab
+    }
+
+    private async Task TestAI()
+    {
+        AddLogEntry("INFO", $"Testing AI model: {SelectedModel}");
+        
+        try
+        {
+            // Simulate AI test
+            await Task.Delay(1500);
+            IsAiReady = true;
+            AddLogEntry("SUCCESS", $"AI model {SelectedModel} is ready");
+        }
+        catch (Exception ex)
+        {
+            IsAiReady = false;
+            AddLogEntry("ERROR", $"AI test failed: {ex.Message}");
+        }
+        
+        StateHasChanged();
+    }
+
+    private async Task HandleFileUpload(ChangeEventArgs e)
+    {
+        if (string.IsNullOrEmpty(SelectedExamType))
+        {
+            AddLogEntry("WARNING", "Please select an exam type before uploading documents");
+            return;
+        }
+
+        AddLogEntry("INFO", $"Uploading documents for {SelectedExamType} exam...");
+        
+        try
+        {
+            // Simulate file upload and processing
+            await Task.Delay(1500);
+            
+            DocumentCount += 3; // Simulate adding documents
+            KnowledgeChunks += 150; // Simulate processing chunks
+            
+            // Check if we have enough knowledge
+            IsKnowledgeReady = DocumentCount >= 2 && KnowledgeChunks >= 100;
+            
+            AddLogEntry("SUCCESS", $"Successfully uploaded and processed documents for {SelectedExamType}");
+        }
+        catch (Exception ex)
+        {
+            AddLogEntry("ERROR", $"File upload failed: {ex.Message}");
+        }
+        
+        StateHasChanged();
+    }
+
+    private void ViewKnowledgeBase()
+    {
+        AddLogEntry("INFO", $"Viewing knowledge base for {SelectedExamType}...");
+        // TODO: Implement knowledge base viewer modal
+    }
+
+    private async Task StartExam()
+    {
+        if (!CanStartExam)
+        {
+            AddLogEntry("WARNING", "Cannot start exam: System not ready. Check connection, AI model, and knowledge base.");
+            return;
+        }
+
+        IsRunning = true;
+        ExamStatus = "Running";
+        QuestionsDetected = 0;
+        AnswersFound = 0;
+        
+        AddLogEntry("SUCCESS", $"Exam started for {SelectedExamType} in {(AutonomousMode ? "autonomous" : "manual")} mode");
+        
+        // Start runtime timer simulation
+        _ = Task.Run(async () =>
+        {
+            var startTime = DateTime.Now;
+            while (IsRunning)
+            {
+                await Task.Delay(1000);
+                var elapsed = DateTime.Now - startTime;
+                Runtime = elapsed.ToString(@"hh\:mm\:ss");
+                
+                // Simulate question detection
+                if (Random.Shared.Next(0, 10) == 0) // 10% chance per second
+                {
+                    QuestionsDetected++;
+                    AddLogEntry("INFO", $"Question #{QuestionsDetected} detected");
+                    
+                    // Simulate answer finding
+                    await Task.Delay(2000);
+                    if (Random.Shared.Next(0, 4) != 0) // 75% success rate
+                    {
+                        AnswersFound++;
+                        AddLogEntry("SUCCESS", $"Answer found for question #{QuestionsDetected}");
+                    }
+                    else
+                    {
+                        AddLogEntry("WARNING", $"No confident answer found for question #{QuestionsDetected}");
+                    }
+                }
+                
+                await InvokeAsync(StateHasChanged);
+            }
+        });
+        
+        StateHasChanged();
+    }
+
+    private void PauseExam()
+    {
+        ExamStatus = "Paused";
+        AddLogEntry("WARNING", "Exam paused");
+        StateHasChanged();
+    }
+
+    private void StopExam()
+    {
+        IsRunning = false;
+        ExamStatus = "Stopped";
+        Runtime = "00:00:00";
+        AddLogEntry("INFO", "Exam stopped");
+        StateHasChanged();
+    }
+
+    private void ClearLog()
+    {
+        ActivityLog.Clear();
+        StateHasChanged();
+    }
+
+    private void AddLogEntry(string level, string message)
+    {
+        ActivityLog.Add(new LogEntry
+        {
+            Level = level,
+            Message = message,
+            Timestamp = DateTime.Now
+        });
+        
+        // Keep only last 100 entries
+        if (ActivityLog.Count > 100)
+        {
+            ActivityLog.RemoveAt(0);
+        }
+    }
+
+    private string GetStatusBadgeClass()
+    {
+        return ExamStatus switch
+        {
+            "Running" => "bg-success",
+            "Paused" => "bg-warning",
+            "Stopped" => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetLogBadgeClass(string level)
+    {
+        return level switch
+        {
+            "SUCCESS" => "bg-success",
+            "ERROR" => "bg-danger",
+            "WARNING" => "bg-warning",
+            "INFO" => "bg-info",
+            _ => "bg-secondary"
+        };
+    }
+
+    public class LogEntry
+    {
+        public string Level { get; set; } = "";
+        public string Message { get; set; } = "";
+        public DateTime Timestamp { get; set; }
+    }
+} 

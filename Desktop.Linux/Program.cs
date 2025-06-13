@@ -56,11 +56,33 @@ public class Program
         var provider = services.BuildServiceProvider();
 
         var appState = provider.GetRequiredService<IAppState>();
+        var autoConnectConfig = provider.GetRequiredService<IAutoConnectConfig>();
+
+        // Try auto-connect first
+        if (autoConnectConfig.IsAutoConnectEnabled)
+        {
+            logger.LogInformation("Auto-connect is enabled. Attempting to connect to {ServerUrl}", autoConnectConfig.ServerUrl);
+            var autoConnectSuccess = await autoConnectConfig.TryAutoConnectAsync();
+            
+            if (autoConnectSuccess)
+            {
+                logger.LogInformation("Auto-connect successful");
+                serverUrl = autoConnectConfig.ServerUrl;
+            }
+            else
+            {
+                logger.LogWarning("Auto-connect failed, falling back to embedded/manual configuration");
+            }
+        }
 
         if (getEmbeddedResult.IsSuccess)
         {
             appState.OrganizationId = getEmbeddedResult.Value.OrganizationId;
-            appState.Host = getEmbeddedResult.Value.ServerUrl.AbsoluteUri;
+            // Only override if auto-connect didn't work
+            if (string.IsNullOrEmpty(appState.Host))
+            {
+                appState.Host = getEmbeddedResult.Value.ServerUrl.AbsoluteUri;
+            }
         }
 
         if (appState.ArgDict.TryGetValue("org-id", out var orgId))

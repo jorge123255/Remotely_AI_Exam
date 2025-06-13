@@ -1,0 +1,102 @@
+# Enhanced Dockerfile for Remotely AI Exam Integration
+# Addresses NuGet package restoration, LibraryManager issues, and build problems
+
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
+WORKDIR /app
+EXPOSE 5000
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+
+# Install Node.js for LibraryManager
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs
+
+# Set environment variables for better NuGet behavior
+ENV NUGET_XMLDOC_MODE=skip
+ENV DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
+ENV DOTNET_NOLOGO=1
+
+# Clear NuGet cache and configure sources
+RUN dotnet nuget locals all --clear
+RUN dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget.org || true
+
+# Create NuGet.config for reliable package sources
+COPY <<NUGET_EOF /src/NuGet.config
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
+  </packageSources>
+  <packageSourceCredentials />
+</configuration>
+NUGET_EOF
+
+# Copy project files for dependency resolution
+COPY ["Server/Server.csproj", "Server/"]
+COPY ["Shared/Shared.csproj", "Shared/"]
+COPY ["Directory.Build.props", "./"]
+
+# Restore packages for both projects
+RUN dotnet restore "Server/Server.csproj" --verbosity normal
+RUN dotnet restore "Shared/Shared.csproj" --verbosity normal
+
+# Copy all source files
+COPY ["Server/", "Server/"]
+COPY ["Shared/", "Shared/"]
+
+# Install LibraryManager CLI
+RUN dotnet tool install -g Microsoft.Web.LibraryManager.Cli
+
+# Add dotnet tools to PATH
+ENV PATH="$PATH:/root/.dotnet/tools"
+
+# Change to Server directory for libman operations
+WORKDIR /src/Server
+
+# Restore JavaScript libraries and manually download msgpack
+RUN libman restore && \
+    mkdir -p wwwroot/lib/msgpack && \
+    mkdir -p wwwroot/lib/microsoft/signalr-protocol-msgpack && \
+    curl -o wwwroot/lib/msgpack/msgpack.min.js https://cdn.jsdelivr.net/npm/msgpack@2.8.0/dist/msgpack.min.js || true && \
+    curl -o wwwroot/lib/microsoft/signalr-protocol-msgpack/signalr-protocol-msgpack.min.js https://cdn.jsdelivr.net/npm/@microsoft/signalr-protocol-msgpack@8.0.7/dist/browser/signalr-protocol-msgpack.min.js || true
+
+# Build Shared project first
+WORKDIR /src
+RUN dotnet build "Shared/Shared.csproj" \
+    -c Release \
+    --no-restore \
+    --verbosity normal
+
+# Build Server project
+RUN dotnet build "Server/Server.csproj" \
+    -c Release \
+    --no-restore \
+    --verbosity normal
+
+# Publish the Server application
+RUN dotnet publish "Server/Server.csproj" \
+    -c Release \
+    -o /app/publish \
+    --no-restore \
+    --verbosity normal
+
+# Final stage
+FROM base AS final
+WORKDIR /app
+
+# Copy published application
+COPY --from=build /app/publish .
+
+# Create necessary directories
+RUN mkdir -p /app/data /app/logs /app/ai-integration
+
+# Set proper permissions
+RUN chmod +x /app/Remotely_Server || true
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:5000/health || exit 1
+
+ENTRYPOINT ["dotnet", "Remotely_Server.dll"] 

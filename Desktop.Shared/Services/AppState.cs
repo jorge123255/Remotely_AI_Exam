@@ -15,6 +15,7 @@ public interface IAppState
 
     event EventHandler<string> ViewerRemoved;
     string AccessKey { get; }
+    bool AutoAcceptConnections { get; set; }
     Dictionary<string, string> ArgDict { get; }
     string Host { get; set; }
     bool IsElevate { get; }
@@ -68,6 +69,8 @@ public class AppState : IAppState
     public event EventHandler<string>? ViewerRemoved;
 
     public string AccessKey { get; private set; } = string.Empty;
+
+    public bool AutoAcceptConnections { get; set; }
 
     public Dictionary<string, string> ArgDict
     {

@@ -94,6 +94,66 @@
         </button>
     </div>
 
+    <div id="aiControlMenu" class="popup-menu ai-control-menu">
+        <div class="ai-control-header">
+            <i class="fas fa-robot"></i>
+            AI Exam Control
+        </div>
+        
+        <div class="ai-control-section">
+            <label for="examTypeSelect">Exam Type:</label>
+            <select id="examTypeSelect">
+                <option value="">Select Exam Type</option>
+                <option value="aws-solutions-architect">AWS Solutions Architect</option>
+                <option value="azure-administrator">Azure Administrator</option>
+                <option value="gcp-associate">GCP Associate Cloud Engineer</option>
+                <option value="cissp">CISSP</option>
+                <option value="comptia-security">CompTIA Security+</option>
+                <option value="comptia-network">CompTIA Network+</option>
+                <option value="ccna">Cisco CCNA</option>
+                <option value="pmp">PMP</option>
+                <option value="custom">Custom/Other</option>
+            </select>
+        </div>
+
+        <div class="ai-control-section">
+            <div class="ai-status-grid">
+                <div class="status-item">
+                    <span class="status-label">AI Model:</span>
+                    <span id="aiModelStatus" class="status-value">Not Connected</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Screen Detection:</span>
+                    <span id="screenDetectionStatus" class="status-value">Inactive</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Knowledge Base:</span>
+                    <span id="knowledgeBaseStatus" class="status-value">Not Loaded</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="ai-control-section">
+            <button id="startAiExamButton" class="ai-control-btn primary" disabled>
+                <i class="fas fa-play"></i>
+                Start AI Exam
+            </button>
+            <button id="stopAiExamButton" class="ai-control-btn secondary" disabled>
+                <i class="fas fa-stop"></i>
+                Stop AI
+            </button>
+        </div>
+
+        <div class="ai-control-section">
+            <div class="ai-reasoning-panel" id="aiReasoningPanel" style="display: none;">
+                <div class="reasoning-header">AI Reasoning:</div>
+                <div class="reasoning-content" id="aiReasoningContent">
+                    Waiting for AI to start...
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="metricsFrame" class="d-none">
         <div>
             Mbps:
@@ -151,7 +211,11 @@
         <div>
             <div id="menuFrame">
                 <div class="menu-column menu-column-left">
-
+                    <button id="aiControlButton"
+                            title="AI Exam Control Panel - Configure and start AI-powered exam taking">
+                        <i class="fas fa-robot"></i>
+                        AI Control
+                    </button>
                 </div>
                 <div class="menu-column menu-column-middle">
                     <button id="changeScreenButton"
@@ -255,7 +319,112 @@
     <script>
         window.addEventListener("load", () => {
             ViewerApp.Init();
+            initializeAIControls();
         })
+
+        function initializeAIControls() {
+            const aiControlButton = document.getElementById('aiControlButton');
+            const aiControlMenu = document.getElementById('aiControlMenu');
+            const examTypeSelect = document.getElementById('examTypeSelect');
+            const startAiExamButton = document.getElementById('startAiExamButton');
+            const stopAiExamButton = document.getElementById('stopAiExamButton');
+            const aiReasoningPanel = document.getElementById('aiReasoningPanel');
+            const aiReasoningContent = document.getElementById('aiReasoningContent');
+
+            // AI Control button click handler
+            aiControlButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                closeAllPopupMenus('aiControlMenu');
+                
+                const rect = aiControlButton.getBoundingClientRect();
+                aiControlMenu.style.left = `${rect.left}px`;
+                aiControlMenu.style.top = `${rect.bottom + 5}px`;
+                aiControlMenu.classList.toggle('open');
+
+                window.addEventListener('click', () => {
+                    closeAllPopupMenus(null);
+                }, { once: true });
+            });
+
+            // Exam type selection handler
+            examTypeSelect.addEventListener('change', () => {
+                const selectedExam = examTypeSelect.value;
+                if (selectedExam) {
+                    updateAIStatus('knowledgeBaseStatus', 'Loading...', 'loading');
+                    
+                    // Simulate loading knowledge base
+                    setTimeout(() => {
+                        updateAIStatus('knowledgeBaseStatus', 'Loaded', 'loaded');
+                        updateAIStatus('aiModelStatus', 'Connected', 'connected');
+                        updateAIStatus('screenDetectionStatus', 'Ready', 'active');
+                        startAiExamButton.disabled = false;
+                    }, 2000);
+                }
+            });
+
+            // Start AI Exam button handler
+            startAiExamButton.addEventListener('click', () => {
+                startAiExamButton.disabled = true;
+                stopAiExamButton.disabled = false;
+                aiReasoningPanel.style.display = 'block';
+                
+                updateAIStatus('screenDetectionStatus', 'Active', 'active');
+                aiReasoningContent.textContent = 'AI Exam mode started. Analyzing screen for questions...';
+                
+                // Simulate AI reasoning updates
+                simulateAIReasoning();
+            });
+
+            // Stop AI Exam button handler
+            stopAiExamButton.addEventListener('click', () => {
+                startAiExamButton.disabled = false;
+                stopAiExamButton.disabled = true;
+                aiReasoningPanel.style.display = 'none';
+                
+                updateAIStatus('screenDetectionStatus', 'Inactive', '');
+                aiReasoningContent.textContent = 'AI Exam mode stopped.';
+            });
+
+            function updateAIStatus(elementId, text, statusClass) {
+                const element = document.getElementById(elementId);
+                element.textContent = text;
+                element.className = 'status-value';
+                if (statusClass) {
+                    element.classList.add(statusClass);
+                }
+            }
+
+            function simulateAIReasoning() {
+                const reasoningMessages = [
+                    'Scanning screen for exam interface...',
+                    'Question detected: Multiple choice format identified',
+                    'Analyzing question content and options...',
+                    'Consulting knowledge base for relevant information...',
+                    'Confidence level: 85% - Selecting option C',
+                    'Waiting for next question...'
+                ];
+
+                let messageIndex = 0;
+                const interval = setInterval(() => {
+                    if (stopAiExamButton.disabled) {
+                        clearInterval(interval);
+                        return;
+                    }
+
+                    aiReasoningContent.textContent = reasoningMessages[messageIndex];
+                    messageIndex = (messageIndex + 1) % reasoningMessages.length;
+                }, 3000);
+            }
+
+            function closeAllPopupMenus(except) {
+                const menus = document.querySelectorAll('.popup-menu');
+                menus.forEach(menu => {
+                    if (menu.id !== except) {
+                        menu.classList.remove('open');
+                    }
+                });
+            }
+        }
     </script>
 </body>
 </html>

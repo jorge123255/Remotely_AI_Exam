@@ -5,7 +5,7 @@
     <UserSecretsId>aspnet-Server-F297B939-4A64-4B42-8C70-E142EBDAA131</UserSecretsId>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <DockerfileTag>remotely</DockerfileTag>
-    <AssemblyName>Remotely_Server</AssemblyName>
+    <AssemblyName>Remotely.Server</AssemblyName>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <DockerComposeProjectPath>..\docker-compose.dcproj</DockerComposeProjectPath>
@@ -15,7 +15,7 @@
   <ItemGroup>
     <PackageReference Include="Bitbound.SimpleMessenger" Version="2.3.14" />
     <PackageReference Include="CommunityToolkit.Diagnostics" Version="8.3.2" />
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="MailKit" Version="4.8.0" />
     <PackageReference Include="Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore" Version="8.0.10" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.10" />

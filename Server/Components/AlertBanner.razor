@@ -1,4 +1,5 @@
-﻿@if (!string.IsNullOrEmpty(Message))
+﻿@namespace Remotely.Server.Components
+@if (!string.IsNullOrEmpty(Message))
 {
     <div class="alert alert-@GetStatusClass() alert-dismissible" role="alert">
         <button type="button" class="btn-close" data-bs-dismiss="alert" @onclick="Close"></button>

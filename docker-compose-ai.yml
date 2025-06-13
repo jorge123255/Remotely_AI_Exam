@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  remotely-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile.ai
+    container_name: remotely-ai-server
+    ports:
+      - "192.168.1.32:5001:5000"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5000
+      - ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./ai-integration:/app/ai-integration
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s 

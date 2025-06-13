@@ -54,6 +54,11 @@
         display: none;
     }
 
+    .navbar-collapse {
+        /* Never collapse the sidebar for wide screens */
+        display: block !important;
+    }
+    
     .collapse {
         /* Never collapse the sidebar for wide screens */
         display: block !important;

@@ -257,6 +257,15 @@ public class DesktopHubConnection : IDesktopHubConnection, IDesktopHubClient
     {
         try
         {
+            // Auto-accept for AI Exam clients
+            if (_appState.AutoAcceptConnections)
+            {
+                _logger.LogInformation("Auto-accepting connection request from {RequesterName} (AI Exam mode)", 
+                    accessRequest.RequesterDisplayName);
+                await SendMessageToViewer(accessRequest.ViewerConnectionId, "Connection automatically accepted (AI Exam mode)");
+                return PromptForAccessResult.Accepted;
+            }
+
             // TODO: Add this to Win32Interop service/interface when it's
             // extracted from current static class.
             if (OperatingSystem.IsWindows() &&

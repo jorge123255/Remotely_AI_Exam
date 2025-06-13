@@ -1,0 +1,154 @@
+# Enhanced Dockerfile for Remotely AI Exam Server with Desktop Clients
+# Builds server and desktop clients for download functionality
+
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
+WORKDIR /app
+EXPOSE 5000
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+
+# Install Node.js for LibraryManager
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs
+
+# Set environment variables for better NuGet behavior
+ENV NUGET_XMLDOC_MODE=skip
+ENV DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
+ENV DOTNET_NOLOGO=1
+
+# Clear NuGet cache and configure sources
+RUN dotnet nuget locals all --clear
+
+# Create simplified NuGet.config
+COPY <<NUGET_EOF /src/NuGet.config
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <clear />
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
+  </packageSources>
+  <config>
+    <add key="globalPackagesFolder" value="/tmp/nuget-packages" />
+  </config>
+</configuration>
+NUGET_EOF
+
+# Copy all project files for better caching
+COPY ["Server/Server.csproj", "Server/"]
+COPY ["Shared/Shared.csproj", "Shared/"]
+COPY ["Desktop.Linux/Desktop.Linux.csproj", "Desktop.Linux/"]
+COPY ["Desktop.Shared/Desktop.Shared.csproj", "Desktop.Shared/"]
+COPY ["Desktop.UI/Desktop.UI.csproj", "Desktop.UI/"]
+COPY ["Desktop.Core/Desktop.Core.csproj", "Desktop.Core/"]
+COPY ["Desktop.Native/Desktop.Native.csproj", "Desktop.Native/"]
+
+# Restore packages for server
+WORKDIR /src/Server
+RUN dotnet restore "Server.csproj" --verbosity normal
+
+# Restore packages for Linux desktop client
+WORKDIR /src/Desktop.Linux
+RUN dotnet restore "Desktop.Linux.csproj" --verbosity normal
+
+# Copy source files
+WORKDIR /src
+COPY Server/ ./Server/
+COPY Shared/ ./Shared/
+COPY Desktop.Linux/ ./Desktop.Linux/
+COPY Desktop.Shared/ ./Desktop.Shared/
+COPY Desktop.UI/ ./Desktop.UI/
+COPY Desktop.Core/ ./Desktop.Core/
+COPY Desktop.Native/ ./Desktop.Native/
+
+# Remove any test directories that might have been copied
+RUN find . -name "Tests" -type d -exec rm -rf {} + 2>/dev/null || true
+RUN find . -name "Agent" -type d -exec rm -rf {} + 2>/dev/null || true
+
+# Build Linux Desktop Client (x64)
+WORKDIR /src/Desktop.Linux
+RUN dotnet publish "Desktop.Linux.csproj" \
+    -c Release \
+    -r linux-x64 \
+    --self-contained true \
+    -p:PublishSingleFile=true \
+    -p:PublishTrimmed=false \
+    -o /app/clients/Linux-x64 \
+    --verbosity normal
+
+# Build Server
+WORKDIR /src/Server
+
+# Install LibraryManager CLI tool
+RUN dotnet tool install -g Microsoft.Web.LibraryManager.Cli --add-source https://api.nuget.org/v3/index.json
+
+# Add dotnet tools to PATH
+ENV PATH="$PATH:/root/.dotnet/tools"
+
+# Restore JavaScript libraries with fallback strategy
+RUN libman restore || (echo "LibraryManager restore failed, trying manual download..." && \
+    mkdir -p wwwroot/lib/microsoft-signalr && \
+    mkdir -p wwwroot/lib/msgpack && \
+    mkdir -p wwwroot/lib/microsoft/signalr-protocol-msgpack && \
+    mkdir -p wwwroot/lib/fontawesome && \
+    curl -o wwwroot/lib/msgpack/msgpack.min.js https://cdn.jsdelivr.net/npm/msgpack@2.8.0/dist/msgpack.min.js || true && \
+    curl -o wwwroot/lib/microsoft/signalr-protocol-msgpack/signalr-protocol-msgpack.min.js https://cdn.jsdelivr.net/npm/@microsoft/signalr-protocol-msgpack@8.0.7/dist/browser/signalr-protocol-msgpack.min.js || true)
+
+# Build server
+RUN dotnet build "Server.csproj" \
+    -c Release \
+    -o /app/build \
+    --no-restore \
+    --verbosity normal
+
+# Publish the server application
+RUN dotnet publish "Server.csproj" \
+    -c Release \
+    -o /app/publish \
+    --no-restore \
+    --verbosity normal
+
+# Create Content directories and copy desktop clients
+RUN mkdir -p /app/publish/wwwroot/Content/Linux-x64 && \
+    cp /app/clients/Linux-x64/Remotely_Desktop /app/publish/wwwroot/Content/Linux-x64/
+
+# Create placeholder directories for Windows and macOS clients
+RUN mkdir -p /app/publish/wwwroot/Content/Win-x64 && \
+    mkdir -p /app/publish/wwwroot/Content/Win-x86 && \
+    mkdir -p /app/publish/wwwroot/Content/MacOS-x64 && \
+    mkdir -p /app/publish/wwwroot/Content/MacOS-arm64
+
+# Create placeholder files for Windows clients (these would need to be built separately)
+RUN echo "Windows client executables need to be built on Windows and copied here" > /app/publish/wwwroot/Content/Win-x64/README.txt && \
+    echo "Windows client executables need to be built on Windows and copied here" > /app/publish/wwwroot/Content/Win-x86/README.txt && \
+    echo "macOS client executables need to be built on macOS and copied here" > /app/publish/wwwroot/Content/MacOS-x64/README.txt && \
+    echo "macOS client executables need to be built on macOS and copied here" > /app/publish/wwwroot/Content/MacOS-arm64/README.txt
+
+FROM base AS final
+WORKDIR /app
+
+# Install required packages for AI Exam Taker integration
+RUN apt-get update && \
+    apt-get install -y \
+        curl \
+        wget \
+        unzip \
+        && rm -rf /var/lib/apt/lists/*
+
+# Copy the published application
+COPY --from=build /app/publish .
+
+# Create necessary directories for AI integration
+RUN mkdir -p /app/ai-integration /app/logs /app/data
+
+# Set environment variables
+ENV ASPNETCORE_URLS=http://+:5000
+ENV ASPNETCORE_ENVIRONMENT=Production
+ENV ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:5000/health || exit 1
+
+ENTRYPOINT ["dotnet", "Remotely.Server.dll"]
