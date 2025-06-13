@@ -73,7 +73,8 @@ public class AutoConnectConfig : IAutoConnectConfig
             using var httpClient = new HttpClient();
             httpClient.Timeout = TimeSpan.FromMilliseconds(ConnectionTimeout);
 
-            var response = await httpClient.GetAsync($"{ServerUrl}/api/health");
+            // Try the root endpoint first (simpler)
+            var response = await httpClient.GetAsync(ServerUrl);
             if (response.IsSuccessStatusCode)
             {
                 _logger.LogInformation("Successfully connected to server at {ServerUrl}", ServerUrl);
